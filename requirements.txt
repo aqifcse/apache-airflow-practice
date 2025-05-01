@@ -1,0 +1,13 @@
+airflow-project
+├── dags
+│   ├── pipeline_1.py
+│   └── pipeline_2.py
+├── plugins
+│   └── custom_operators
+│       └── __init__.py
+├── include
+│   └── sql
+│       └── queries.sql
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
