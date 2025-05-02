@@ -8,7 +8,7 @@ from airflow.plugins_manager import AirflowPlugin
 
 class CustomOperatorsPlugin(AirflowPlugin):
     name = "custom_operators_plugin"
-    operators = []  # Add your custom operators here
+    operators = []
     hooks = []
     executors = []
     macros = []
