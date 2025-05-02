@@ -1,9 +1,9 @@
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from airflow.operators.sqlite_operator import SqliteOperator
+from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.hooks.postgres_hook import PostgresHook
 from airflow.utils.dates import days_ago
 from datetime import timedelta
-import sqlite3
 
 default_args = {
     'owner': 'airflow',
@@ -26,16 +26,25 @@ def process_data(**context):
 def store_in_db(**context):
     ti = context['task_instance']
     processed_data = ti.xcom_pull(task_ids='process_data')
+
+    # Use PostgresHook to handle connection
+    pg_hook = PostgresHook(postgres_conn_id='postgres_default')
+
     # Create temporary table and store data
-    conn = sqlite3.connect('/usr/local/airflow/airflow.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS temp_data
-                 (id INTEGER PRIMARY KEY, data TEXT)''')
-    c.execute("INSERT INTO temp_data (data) VALUES (?)", (
-        str(processed_data),
-    ))
-    conn.commit()
-    conn.close()
+    create_table_sql = '''
+    CREATE TABLE IF NOT EXISTS temp_data (
+        id SERIAL PRIMARY KEY,
+        data TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )'''
+
+    insert_sql = "INSERT INTO temp_data (data) VALUES (%s)"
+
+    with pg_hook.get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(create_table_sql)
+            cur.execute(insert_sql, (str(processed_data),))
+            conn.commit()
 
 
 dag = DAG(
@@ -59,11 +68,12 @@ store_task = PythonOperator(
     dag=dag,
 )
 
-cleanup_task = SqliteOperator(
+cleanup_task = PostgresOperator(
     task_id='cleanup_temp_data',
-    sqlite_conn_id='sqlite_default',
+    postgres_conn_id='postgres_default',
     sql=(
-        'DELETE FROM temp_data WHERE date(created_at) < date("now", "-7 days")'
+        'DELETE FROM temp_data WHERE'
+        ' created_at < CURRENT_DATE - INTERVAL \'7 days\'',
     ),
     dag=dag,
 )
